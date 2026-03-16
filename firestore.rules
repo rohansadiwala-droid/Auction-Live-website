@@ -1,0 +1,145 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: players
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required, length 1-100)
+    //   - photoUrl: string (optional, valid URL)
+    //   - gender: string (required, 'Male' or 'Female')
+    //   - basePrice: number (required, >= 0)
+    //   - soldPrice: number (optional, >= 0)
+    //   - teamId: string (optional)
+    //   - status: string (required, 'Available', 'In Auction', 'Sold', 'Unsold')
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: teams
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required, length 1-100)
+    //   - logoUrl: string (optional, valid URL)
+    //   - color: string (required, length 1-20)
+    //   - genderCategory: string (required, 'Male' or 'Female')
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: auctionState
+    // Document ID: 'current'
+    // Fields:
+    //   - currentPlayerId: string (optional)
+    //   - updatedAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      // The user explicitly requested an admin-only edit capability.
+      // We will bootstrap the admin using the provided email.
+      return isAuthenticated() && request.auth.token.email == "rohansadiwala@gmail.com" && request.auth.token.email_verified == true;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+             request.resource.data[field].size() >= minLen &&
+             request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function isValidOptionalUrl(field) {
+      return !('field' in request.resource.data) || isValidUrl(request.resource.data[field]);
+    }
+
+    function isPositiveOrZero(field) {
+      return request.resource.data[field] is number && request.resource.data[field] >= 0;
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidPlayer(data) {
+      let allowedFields = ['name', 'photoUrl', 'gender', 'basePrice', 'soldPrice', 'teamId', 'status', 'createdAt'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['name', 'gender', 'basePrice', 'status', 'createdAt']) &&
+             validStringLength('name', 1, 100) &&
+             (data.gender == 'Male' || data.gender == 'Female') &&
+             isPositiveOrZero('basePrice') &&
+             (!('soldPrice' in data) || (data.soldPrice is number && data.soldPrice >= 0)) &&
+             (!('teamId' in data) || data.teamId is string) &&
+             (!('photoUrl' in data) || data.photoUrl is string) && // Relaxed URL check for data URIs or empty strings
+             (data.status in ['Available', 'In Auction', 'Sold', 'Unsold']) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidTeam(data) {
+      let allowedFields = ['name', 'logoUrl', 'color', 'genderCategory', 'createdAt'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['name', 'color', 'genderCategory', 'createdAt']) &&
+             validStringLength('name', 1, 100) &&
+             validStringLength('color', 1, 30) &&
+             (data.genderCategory == 'Male' || data.genderCategory == 'Female') &&
+             (!('logoUrl' in data) || data.logoUrl is string) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidAuctionState(data) {
+      let allowedFields = ['currentPlayerId', 'updatedAt'];
+      return hasOnlyAllowedFields(allowedFields) &&
+             hasRequiredFields(['updatedAt']) &&
+             (!('currentPlayerId' in data) || data.currentPlayerId is string || data.currentPlayerId == null) &&
+             data.updatedAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // Public read access as requested by user ("Anyone with the link can view")
+    // Only admin can write.
+
+    match /players/{playerId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidPlayer(request.resource.data);
+      allow update: if isAdmin() && isValidPlayer(request.resource.data) && areImmutableFieldsUnchanged(['createdAt']);
+      allow delete: if isAdmin();
+    }
+
+    match /teams/{teamId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidTeam(request.resource.data);
+      allow update: if isAdmin() && isValidTeam(request.resource.data) && areImmutableFieldsUnchanged(['createdAt']);
+      allow delete: if isAdmin();
+    }
+
+    match /auctionState/{stateId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidAuctionState(request.resource.data);
+      allow update: if isAdmin() && isValidAuctionState(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}

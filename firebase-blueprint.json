@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "Player": {
+      "title": "Player",
+      "description": "A player in the auction",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "gender": { "type": "string", "enum": ["Male", "Female"] },
+        "basePrice": { "type": "number" },
+        "soldPrice": { "type": "number" },
+        "teamId": { "type": "string" },
+        "status": { "type": "string", "enum": ["Available", "In Auction", "Sold", "Unsold"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "gender", "basePrice", "status", "createdAt"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "A team participating in the auction",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "color": { "type": "string" },
+        "genderCategory": { "type": "string", "enum": ["Male", "Female"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "color", "genderCategory", "createdAt"]
+    },
+    "AuctionState": {
+      "title": "AuctionState",
+      "description": "The current live state of the auction",
+      "type": "object",
+      "properties": {
+        "currentPlayerId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["updatedAt"]
+    }
+  },
+  "firestore": {
+    "/players/{playerId}": {
+      "schema": { "$ref": "#/entities/Player" },
+      "description": "Collection of all players"
+    },
+    "/teams/{teamId}": {
+      "schema": { "$ref": "#/entities/Team" },
+      "description": "Collection of all teams"
+    },
+    "/auctionState/{stateId}": {
+      "schema": { "$ref": "#/entities/AuctionState" },
+      "description": "Singleton document 'current' tracking the live auction state"
+    }
+  }
+}
